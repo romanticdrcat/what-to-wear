@@ -941,19 +941,6 @@ def sidebar_controls(profile: dict) -> Dict[str, Any]:
     # ✅ 핵심: 버튼 없이 자동 fetch
     _maybe_autofetch_weather(lat, lon, temp, rain, wind)
 
-    # 현재 반영된 날씨 표시
-    st.sidebar.write("**현재 반영된 날씨**")
-    st.sidebar.write(st.session_state["weather_live"])
-
-    st.sidebar.divider()
-    st.sidebar.subheader("학습된 취향(요약)")
-    prefs = get_preference_summary()
-    if prefs:
-        for k, s in prefs:
-            st.sidebar.write(f"- {k} : {s:.2f}")
-    else:
-        st.sidebar.write("아직 데이터가 없다.")
-
     return {"api_key": api_key, "weather": st.session_state["weather_live"]}
 
 
@@ -1248,6 +1235,7 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
 
 
 
