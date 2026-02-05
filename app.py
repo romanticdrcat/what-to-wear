@@ -732,6 +732,9 @@ def onboarding_screen() -> None:
     st.title(APP_TITLE)
     st.caption("귀찮은 사람들을 위한 코디 추천 어플이다. 최초 1회만 물어본다.")
 
+    # (중요) 온보딩 화면에서도 위치 컴포넌트를 렌더링해줘야 브라우저 권한 팝업이 뜬다.
+    # 체크박스를 켜면 즉시 geolocation 컴포넌트가 렌더링되면서 허용 요청이 뜬다.
+
     with st.form("onboarding_form", clear_on_submit=False):
         age = st.number_input("나이", min_value=10, max_value=80, value=22, step=1)
         gender = st.selectbox("성별", ["여성", "남성", "논바이너리/기타", "비공개"])
@@ -739,13 +742,30 @@ def onboarding_screen() -> None:
             "옷장의 스타일",
             ["편한 게 최고", "무조건 깔끔단정", "스트릿/힙", "미니멀", "화려하게", "빈티지", "스포티", "기타"],
         )
-        location_allowed = st.checkbox("위치 정보 허용", value=False)
+        location_allowed = st.checkbox("위치 정보 허용(허용하면 자동으로 날씨를 불러온다)", value=True)
+
+        # ✅ 여기: 체크하면 바로 브라우저 권한 요청이 뜨도록 컴포넌트를 렌더링
+        loc = None
+        if location_allowed:
+            st.markdown("✅ 브라우저에서 위치 권한을 **허용**해라. (버튼 누를 필요 없다)")
+            loc = streamlit_geolocation()
+
+            if loc and loc.get("latitude") and loc.get("longitude"):
+                st.success(f"위치 확인됨: lat={loc['latitude']}, lon={loc['longitude']}")
+            else:
+                st.info("아직 위치값을 못 받았다. 브라우저 팝업에서 허용했는지 확인해라.")
 
         submitted = st.form_submit_button("시작하기")
 
     if submitted:
         upsert_profile(int(age), gender, closet_style, bool(location_allowed))
-        st.success("온보딩 완료다. 이제 옷장을 채우면 된다.")
+
+        # ✅ 여기: 온보딩 끝날 때 위경도를 세션에 저장해둔다.
+        if location_allowed and loc and loc.get("latitude") and loc.get("longitude"):
+            st.session_state["geo_lat"] = str(loc["latitude"])
+            st.session_state["geo_lon"] = str(loc["longitude"])
+
+        st.success("온보딩 완료다. 이제 자동으로 날씨를 불러온다.")
         st.session_state["onboarded"] = True
         st.rerun()
 
@@ -889,80 +909,53 @@ def sidebar_controls(profile: dict) -> Dict[str, Any]:
     )
     st.sidebar.divider()
 
-    # ---- 기상청 ----
-    st.sidebar.subheader("기상청 단기예보 (getVilageFcst)")
-    
-    # [추가] apis.data.go.kr 네트워크 연결 테스트
-    if st.sidebar.button("🔎 apis.data.go.kr 연결 테스트"):
-        try:
-            test = requests.get("https://kma-proxy-worker.pages.dev", timeout=(5, 10))
-            st.sidebar.success(f"연결 OK: HTTP {test.status_code}")
-        except Exception as e:
-            st.sidebar.error(f"연결 실패(네트워크): {e}")
+    # ---- 위치/날씨: 버튼 없이 자동 ----
+    st.sidebar.subheader("내 위치 & 자동 날씨")
 
-    st.sidebar.caption("serviceKey + 위경도(lat, lon)를 넣고 불러오면 자동으로 날씨가 반영된다.")
-
-    # ---- 내 위치(온보딩에서 허용한 경우에만) ----
+    # 온보딩에서 위치 허용한 사람만 자동 위치를 요청/갱신한다.
     if int(profile.get("location_allowed", 0)) == 1:
-        st.sidebar.subheader("내 위치")
         loc = streamlit_geolocation()
         if loc and loc.get("latitude") and loc.get("longitude"):
             st.session_state["geo_lat"] = str(loc["latitude"])
             st.session_state["geo_lon"] = str(loc["longitude"])
-            st.sidebar.success("위치 가져왔다.")
-        elif st.sidebar.button("내 위치 새로고침"):
-            loc = streamlit_geolocation()
-            if loc and loc.get("latitude") and loc.get("longitude"):
-                st.session_state["geo_lat"] = str(loc["latitude"])
-                st.session_state["geo_lon"] = str(loc["longitude"])
-                st.sidebar.success("위치 가져왔다.")
-            else:
-                st.sidebar.warning("위치값을 못 받았다. 브라우저 팝업에서 허용했는지 확인해라.")
+            st.sidebar.success("위치 자동 감지됨")
+        else:
+            st.sidebar.info("위치값을 아직 못 받았다. 브라우저에서 위치 허용했는지 확인해라.")
 
-    lat = st.sidebar.text_input("위도(lat)", value=st.session_state.get("geo_lat", ""))
-    lon = st.sidebar.text_input("경도(lon)", value=st.session_state.get("geo_lon", ""))
-    fetch = st.sidebar.button("기상청 날씨 불러오기")
+    # 세션에 저장된 위경도가 있으면 자동으로 날씨 호출
+    lat = st.session_state.get("geo_lat", "")
+    lon = st.session_state.get("geo_lon", "")
 
-    # 기본은 기존 방식(임시 입력) 유지
+    # ---- 임시 입력(폴백) ----
     st.sidebar.divider()
     st.sidebar.subheader("날씨(임시 입력)")
-    st.sidebar.caption("기상청 호출 실패/미입력 시엔 이 값을 쓴다.")
+    st.sidebar.caption("자동 날씨를 못 가져오면 이 값을 쓴다.")
     temp = st.sidebar.slider("오늘 체감온도(°C)", min_value=-10, max_value=35, value=10, step=1)
     rain = st.sidebar.selectbox("강수", ["없음", "비", "눈", "비/눈"], index=0)
     wind = st.sidebar.slider("바람(체감 영향)", min_value=0, max_value=10, value=3, step=1)
 
-    # 세션에 날씨 저장(추천 탭에서 재사용)
+    # weather_live 초기값
     if "weather_live" not in st.session_state:
         st.session_state["weather_live"] = {"temp_c": temp, "precip": rain, "wind_level": wind}
 
+    # ✅ 핵심: 버튼 없이 자동 fetch
     _maybe_autofetch_weather(lat, lon, temp, rain, wind)
 
-    # 기상청 fetch 시도
-    if fetch:
-        try:
-            _lat = float(lat.strip())
-            _lon = float(lon.strip())
-            with st.spinner("기상청 단기예보 불러오는 중..."):
-                w = fetch_vilage_fcst_weather(lat=_lat, lon=_lon)
+    # 현재 반영된 날씨 표시
+    st.sidebar.write("**현재 반영된 날씨**")
+    st.sidebar.write(st.session_state["weather_live"])
 
-            st.session_state["weather_live"] = {
-                "temp_c": int(w.get("temp_c", temp)),
-                "precip": str(w.get("precip", rain)),
-                "wind_level": int(w.get("wind_level", wind)),
-                "source": w.get("source"),
-                "base_date": w.get("base_date"),
-                "base_time": w.get("base_time"),
-                "fcst_at": w.get("fcst_at"),
-                "pop_percent": w.get("pop_percent"),
-                "nx": w.get("nx"),
-                "ny": w.get("ny"),
-            }
-            st.sidebar.success(f"불러왔다: {st.session_state['weather_live'].get('fcst_at')} 예보 기준")
-        except Exception as e:
-            st.sidebar.error(f"기상청 호출 실패: {e}")
-            st.sidebar.info("임시 입력 값으로 계속 진행한다.")
+    st.sidebar.divider()
+    st.sidebar.subheader("학습된 취향(요약)")
+    prefs = get_preference_summary()
+    if prefs:
+        for k, s in prefs:
+            st.sidebar.write(f"- {k} : {s:.2f}")
+    else:
+        st.sidebar.write("아직 데이터가 없다.")
 
     return {"api_key": api_key, "weather": st.session_state["weather_live"]}
+
 
 
 def tab_analysis(weather: dict) -> None:
@@ -1255,6 +1248,7 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
 
 
 
