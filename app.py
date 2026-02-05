@@ -29,7 +29,7 @@ APP_TITLE = "오늘 뭐 입지"
 DB_PATH = "ready_to_wear.sqlite"
 
 # [추가] 기상청 단기예보(동네예보) 엔드포인트
-KMA_VILAGE_BASE_URL = "https://apis.data.go.kr/1360000/VilageFcstInfoService_2.0/getVilageFcst"
+KMA_VILAGE_BASE_URL = "https://kma-proxy-worker.pages.dev/api/kma"
 
 
 # =========================
@@ -129,40 +129,33 @@ def _requests_session() -> requests.Session:
 
 
 def fetch_vilage_fcst_weather(
-    service_key: str,
     lat: float,
     lon: float,
     timeout: int = 10,
 ) -> dict:
+
     """
     기상청 단기예보(getVilageFcst)에서 '지금 시각에 가장 가까운 1시간 예보'를 뽑아서
     앱이 쓰는 weather dict(temp_c, precip, wind_level)로 변환한다.
 
     사용 카테고리: TMP(기온), PTY(강수형태), POP(강수확률), WSD(풍속) 등. :contentReference[oaicite:6]{index=6}
     """
-    if not service_key.strip():
-        raise ValueError("serviceKey가 비어 있다.")
 
     kst = ZoneInfo("Asia/Seoul")
     now = dt.datetime.now(tz=kst)
     base_date, base_time = _kma_base_datetime_kst(now)
     nx, ny = latlon_to_grid(lat, lon)
 
-    # serviceKey 인코딩/디코딩 혼선 대응:
-    # - Decoding 키(원문)면 params로 보내도 OK(요청 라이브러리가 인코딩 처리)
-    # - Encoding 키(이미 % 포함)면 params로 보내면 %가 재인코딩될 수 있어 URL에 직접 붙여 호출
-    already_encoded = "%" in service_key
+params = {
+    "pageNo": "1",
+    "numOfRows": "1000",
+    "dataType": "JSON",
+    "base_date": base_date,
+    "base_time": base_time,
+    "nx": str(nx),
+    "ny": str(ny),
+}
 
-    params = {
-        "serviceKey": service_key,
-        "pageNo": "1",
-        "numOfRows": "1000",
-        "dataType": "JSON",
-        "base_date": base_date,
-        "base_time": base_time,
-        "nx": str(nx),
-        "ny": str(ny),
-    }
 
     sess = _requests_session()
 
@@ -879,7 +872,7 @@ def _maybe_autofetch_weather(
 
     try:
         with st.spinner("기상청 단기예보 자동 불러오는 중..."):
-            w = fetch_vilage_fcst_weather(service_key=kma_key.strip(), lat=_lat, lon=_lon)
+            w = fetch_vilage_fcst_weather(lat=_lat, lon=_lon)
 
         st.session_state["weather_live"] = {
             "temp_c": int(w.get("temp_c", temp)),
@@ -921,7 +914,6 @@ def sidebar_controls(profile: dict) -> Dict[str, Any]:
             st.sidebar.error(f"연결 실패(네트워크): {e}")
 
     st.sidebar.caption("serviceKey + 위경도(lat, lon)를 넣고 불러오면 자동으로 날씨가 반영된다.")
-    kma_key = st.sidebar.text_input("기상청 serviceKey", type="password")
 
     # ---- 내 위치(온보딩에서 허용한 경우에만) ----
     if int(profile.get("location_allowed", 0)) == 1:
@@ -964,7 +956,7 @@ def sidebar_controls(profile: dict) -> Dict[str, Any]:
             _lat = float(lat.strip())
             _lon = float(lon.strip())
             with st.spinner("기상청 단기예보 불러오는 중..."):
-                w = fetch_vilage_fcst_weather(service_key=kma_key.strip(), lat=_lat, lon=_lon)
+                w = fetch_vilage_fcst_weather(lat=_lat, lon=_lon)
 
             st.session_state["weather_live"] = {
                 "temp_c": int(w.get("temp_c", temp)),
@@ -1270,6 +1262,7 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
 
 
 
