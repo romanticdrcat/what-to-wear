@@ -295,6 +295,10 @@ def init_db() -> None:
         )
         """
     )
+    try:
+        cur.execute("ALTER TABLE closet_items ADD COLUMN owned INTEGER DEFAULT 1")
+    except Exception:
+        pass
 
     cur.execute(
         """
@@ -391,8 +395,8 @@ def insert_closet_items(items: List[dict]) -> None:
         cur.execute(
             """
             INSERT OR REPLACE INTO closet_items
-            (id, name, category, color, length, fit, flashiness, tags_json, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            (id, name, category, color, length, fit, flashiness, tags_json, owned, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 it["id"],
@@ -403,6 +407,7 @@ def insert_closet_items(items: List[dict]) -> None:
                 it.get("fit"),
                 int(it.get("flashiness", 3)),
                 json.dumps(it.get("tags", []), ensure_ascii=False),
+                int(it.get("owned", 1)), 
                 now,
             ),
         )
@@ -419,7 +424,7 @@ def delete_item(item_id: str) -> None:
 
 
 def update_item(item_id: str, patch: dict) -> None:
-    allowed = ["name", "category", "color", "length", "fit", "flashiness", "tags_json"]
+    allowed = ["name", "category", "color", "length", "fit", "flashiness", "tags_json", "owned"]
     sets = []
     vals = []
     for k, v in patch.items():
@@ -755,6 +760,92 @@ def render_outfit_card(outfit: dict) -> None:
         unsafe_allow_html=True,
     )
 
+def render_outfit_card_with_toggles_buffered(
+    outfit: dict,
+    closet_lookup: Dict[str, dict],
+) -> List[str]:
+    """
+    코디 카드 안에서 아이템별 '있어/없어' 토글을 보여준다.
+    - 토글은 즉시 DB 반영 X (세션에만 저장)
+    - 반환값: 사용자가 '없어'로 체크한 item_id 리스트
+    """
+
+    st.markdown(
+        """
+        <style>
+        .outfit-card {
+            border: 1px solid #e6e6e6;
+            border-radius: 16px;
+            padding: 16px;
+            background: #ffffff;
+            margin-bottom: 12px;
+        }
+        .outfit-title {
+            font-size: 18px;
+            font-weight: 800;
+            margin-bottom: 8px;
+        }
+        .outfit-meta {
+            font-size: 13px;
+            color: #666;
+            margin-bottom: 12px;
+        }
+        .outfit-item {
+            font-size: 15.5px;
+            line-height: 1.65;
+            margin: 6px 0;
+        }
+        .outfit-item-name { font-weight: 650; }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    outfit_id = outfit["id"]
+    state_key = f"owned_buffer_{outfit_id}"
+    if state_key not in st.session_state:
+        st.session_state[state_key] = {}  # {item_id: True/False}
+
+    st.markdown('<div class="outfit-card">', unsafe_allow_html=True)
+    st.markdown(f'<div class="outfit-title">{outfit["title"]}</div>', unsafe_allow_html=True)
+    st.markdown(
+        f'<div class="outfit-meta">상황: {outfit["situation"]} · 날짜: {outfit["date"]}</div>',
+        unsafe_allow_html=True,
+    )
+
+    missing_ids: List[str] = []
+
+    for itref in outfit.get("items", []):
+        iid = itref["id"]
+        name = itref.get("name", "")
+
+        owned_db = int(closet_lookup.get(iid, {}).get("owned", 1)) == 1
+        owned_now = st.session_state[state_key].get(iid, owned_db)
+
+        left, right = st.columns([0.78, 0.22], vertical_alignment="center")
+
+        with left:
+            st.markdown(
+                f'<div class="outfit-item">• <span class="outfit-item-name">{name}</span></div>',
+                unsafe_allow_html=True,
+            )
+
+        with right:
+            toggled = st.toggle(
+                "있어/없어",
+                value=owned_now,
+                key=f"owned_toggle_{outfit_id}_{iid}",
+                label_visibility="collapsed",
+            )
+            st.session_state[state_key][iid] = toggled
+
+        if st.session_state[state_key][iid] is False:
+            missing_ids.append(iid)
+
+    st.markdown("</div>", unsafe_allow_html=True)
+
+    return missing_ids
+
 
 def onboarding_screen() -> None:
     st.title(APP_TITLE)
@@ -1081,8 +1172,9 @@ def tab_recommend(profile: dict, api_key: str, weather: dict) -> None:
     if "current_outfit" not in st.session_state:
         st.session_state["current_outfit"] = None
 
-    closet_items = list_owned_closet_items()
-    closet_lookup = {it["id"]: it for it in closet_items}
+    all_items = list_closet_items()
+    closet_lookup = {it["id"]: it for it in all_items}  # UI 토글 기본값용(owned 포함)
+    closet_items = [it for it in all_items if int(it.get("owned", 1)) == 1]  # ✅ 추천 후보는 owned=1만
     pref_summary = get_preference_summary()
 
     def refresh_reco():
@@ -1124,50 +1216,39 @@ def tab_recommend(profile: dict, api_key: str, weather: dict) -> None:
 
     outfit = st.session_state["current_outfit"]
     if outfit:
-        # ✅ 코디 카드(기존 HTML 카드)
-        render_outfit_card(outfit)
-    
-        st.markdown("#### 이 코디 아이템들, 실제로 있어?")
-    
-        # ✅ 아이템별 있어/없어 체크박스
-        missing_ids: List[str] = []
-        for it in outfit["items"]:
-            # 각 아이템 체크박스 key는 유니크해야 함
-            k = f"ownchk_{outfit['id']}_{it['id']}"
-            has_it = st.checkbox(f"{it['name']}", value=True, key=k)
-            if not has_it:
-                missing_ids.append(it["id"])
-    
-        # ✅ 버튼 3개: 별로야 / 나 이거 없어! / 이걸로 할래
-        b1, bmid, b2 = st.columns([1, 1.2, 1])
-    
-        with b1:
+        # ✅ 카드 안에서 토글 표시(버튼 누를 때까지 DB 반영 X)
+        missing_ids = render_outfit_card_with_toggles_buffered(
+            outfit=outfit,
+            closet_lookup=closet_lookup,
+        )
+
+        c1, c_mid, c2 = st.columns([1, 1.2, 1])
+
+        with c1:
             if st.button("별로야"):
                 keys = preference_keys_from_outfit_items(outfit["items"], closet_lookup)
                 bump_preference(keys, delta=-0.2)
                 refresh_reco()
                 st.rerun()
-    
-        with bmid:
-            # missing_ids가 있을 때만 의미가 있으니 disabled 처리
-            if st.button("나 이거 없어!", disabled=(len(missing_ids) == 0)):
-                # ✅ DB 반영: 체크 해제된 아이템은 owned=0 처리
+
+        with c_mid:
+            disabled = len(missing_ids) == 0
+            if st.button("나 이거 없어!", disabled=disabled):
                 for iid in missing_ids:
-                    set_item_owned(iid, owned=False)
-    
-                # ✅ 즉시 새로고침: 현재 코디 버리고 다시 추천
+                    update_item(iid, {"owned": 0})
+
+                # 코디 새로고침
                 st.session_state["current_outfit"] = None
-                st.success("없는 아이템을 옷장에서 제외했다. 새 코디 뽑는 중...")
+                st.success(f"없음 처리 {len(missing_ids)}개 반영했다. 코디를 다시 고른다.")
                 st.rerun()
-    
-        with b2:
+
+        with c2:
             if st.button("이걸로 할래"):
                 save_outfit(outfit)
                 st.success("오늘의 코디 완료!")
                 keys = preference_keys_from_outfit_items(outfit["items"], closet_lookup)
                 bump_preference(keys, delta=0.6)
                 st.session_state["current_outfit"] = None
-                st.rerun()
 
 
 
@@ -1313,6 +1394,7 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
 
 
 
