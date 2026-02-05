@@ -10,6 +10,8 @@ from typing import Any, Dict, List, Optional, Tuple
 import streamlit as st
 from streamlit_geolocation import streamlit_geolocation
 
+from urllib.parse import urlencode
+
 # [추가] 기상청 호출용
 import requests
 from requests.adapters import HTTPAdapter
@@ -1386,24 +1388,48 @@ def main() -> None:
     weather = settings["weather"]
 
     ensure_initial_closet(profile, api_key)
+    # ✅ [추가] 온보딩 직후/첫 진입에는 기본 탭을 "코디 추천"으로 보이게 한다.
+    # 쿼리 파라미터 tab=reco 를 사용해서, tabs를 만들 때 key로 기본 선택을 유도한다.
+    q = st.query_params
+    if "tab" not in q:
+        st.query_params["tab"] = "reco"
+        st.rerun()
+
+    tab_order = ["closet", "reco", "history", "analysis"]
+    tab_names = ["내 옷장", "코디 추천", "오늘의 코디 모음", "분석"]
+
+    default_idx = 1  # reco
+    try:
+        default_idx = tab_order.index(st.query_params.get("tab", "reco"))
+    except Exception:
+        default_idx = 1
+
+    tabs = st.tabs(tab_names)
+
+    # ✅ [추가] 기본 인덱스 탭이 보이도록, 해당 탭 블록을 먼저 실행(렌더)한다.
+    # Streamlit은 탭 “선택” API가 없어서, 렌더 순서로 체감 기본 탭을 맞춘다.
+    render_order = list(range(len(tabs)))
+    render_order.remove(default_idx)
+    render_order = [default_idx] + render_order
 
     tabs = st.tabs(["내 옷장", "코디 추천", "오늘의 코디 모음", "분석"])
 
-    with tabs[0]:
-        tab_closet()
+    tab_handlers = [
+        lambda: tab_closet(),
+        lambda: tab_recommend(profile, api_key, weather),
+        lambda: tab_today_collection(),
+        lambda: tab_analysis(weather),
+    ]
 
-    with tabs[1]:
-        tab_recommend(profile, api_key, weather)
+    for i in render_order:
+        with tabs[i]:
+            tab_handlers[i]()
 
-    with tabs[2]:
-        tab_today_collection()
-
-    with tabs[3]:
-        tab_analysis(weather)
 
 
 if __name__ == "__main__":
     main()
+
 
 
 
