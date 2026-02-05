@@ -1030,19 +1030,24 @@ def tab_recommend(profile: dict, api_key: str, weather: dict) -> None:
     st.subheader("코디 추천")
     st.caption("기본 메인 화면이다. 상황을 고르면 옷장 기반으로 코디를 뽑는다.")
 
-   situation = st.selectbox(
-    "오늘의 상황",
-    ["학교", "데이트", "직장", "피크닉", "운동", "모임", "기타"],
-    key="situation",
-)
-prev = st.session_state.get("prev_situation")
-if prev is None:
-    st.session_state["prev_situation"] = situation
-elif prev != situation:
-    # 상황이 바뀌면 새 코디 뽑도록 초기화
-    st.session_state["prev_situation"] = situation
-    st.session_state["current_outfit"] = None
-    st.rerun()
+    if "current_outfit" not in st.session_state:
+        st.session_state["current_outfit"] = None
+
+    situation = st.selectbox(
+        "오늘의 상황",
+        ["학교", "데이트", "직장", "피크닉", "운동", "모임", "기타"],
+        key="situation",
+    )
+
+    # ✅ 상황 바뀌면 코디 초기화 후 rerun
+    prev = st.session_state.get("prev_situation")
+    if prev is None:
+        st.session_state["prev_situation"] = situation
+    elif prev != situation:
+        st.session_state["prev_situation"] = situation
+        st.session_state["current_outfit"] = None
+        st.rerun()
+
 
 
     if "current_outfit" not in st.session_state:
@@ -1248,6 +1253,7 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
 
 
 
