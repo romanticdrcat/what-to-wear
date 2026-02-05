@@ -164,110 +164,110 @@ def fetch_vilage_fcst_weather(
         "ny": str(ny),
     }
 
-sess = _requests_session()
+    sess = _requests_session()
 
-if already_encoded:
-    url = f"{KMA_VILAGE_BASE_URL}?serviceKey={service_key}"
-    params2 = params.copy()
-    params2.pop("serviceKey", None)
-    r = sess.get(url, params=params2, timeout=(5, 25))  # connect 5s, read 25s
-else:
-    r = sess.get(KMA_VILAGE_BASE_URL, params=params, timeout=(5, 25))
+    if already_encoded:
+        url = f"{KMA_VILAGE_BASE_URL}?serviceKey={service_key}"
+        params2 = params.copy()
+        params2.pop("serviceKey", None)
+        r = sess.get(url, params=params2, timeout=(5, 25))  # connect 5s, read 25s
+    else:
+        r = sess.get(KMA_VILAGE_BASE_URL, params=params, timeout=(5, 25))
 
-# ✅ 여기부터는 if/else 바깥(하지만 함수 안)
-r.raise_for_status()
-payload = r.json()
+    r.raise_for_status()
+    payload = r.json()
 
-result_code = _safe_get(payload, ["response", "header", "resultCode"])
-if result_code != "00":
-    msg = _safe_get(payload, ["response", "header", "resultMsg"], "UNKNOWN_ERROR")
-    raise RuntimeError(f"KMA API error: {result_code} / {msg}")
+    result_code = _safe_get(payload, ["response", "header", "resultCode"])
+    if result_code != "00":
+        msg = _safe_get(payload, ["response", "header", "resultMsg"], "UNKNOWN_ERROR")
+        raise RuntimeError(f"KMA API error: {result_code} / {msg}")
 
-items = _safe_get(payload, ["response", "body", "items", "item"], [])
-if not items:
-    raise RuntimeError("KMA API returned no items.")
+    items = _safe_get(payload, ["response", "body", "items", "item"], [])
+    if not items:
+        raise RuntimeError("KMA API returned no items.")
 
-# 예보는 fcstDate+fcstTime 단위로 나온다. 지금 시각과 가장 가까운 (미래 우선) 1시간 슬롯을 고른다.
-now_naive = now.replace(tzinfo=None)
-candidates = {}
-for it in items:
-    try:
-        fcst_dt = dt.datetime.strptime(it["fcstDate"] + it["fcstTime"], "%Y%m%d%H%M")
-    except Exception:
-        continue
-    if fcst_dt < (now_naive - dt.timedelta(hours=2)):
-        continue
-    key = fcst_dt.strftime("%Y%m%d%H%M")
-    candidates.setdefault(key, []).append(it)
+    # 예보는 fcstDate+fcstTime 단위로 나온다. 지금 시각과 가장 가까운 (미래 우선) 1시간 슬롯을 고른다.
+    now_naive = now.replace(tzinfo=None)
+    candidates = {}
+    for it in items:
+        try:
+            fcst_dt = dt.datetime.strptime(it["fcstDate"] + it["fcstTime"], "%Y%m%d%H%M")
+        except Exception:
+            continue
+        if fcst_dt < (now_naive - dt.timedelta(hours=2)):
+            continue
+        key = fcst_dt.strftime("%Y%m%d%H%M")
+        candidates.setdefault(key, []).append(it)
 
-if not candidates:
-    raise RuntimeError("예보 후보 슬롯을 찾지 못했다.")
+    if not candidates:
+        raise RuntimeError("예보 후보 슬롯을 찾지 못했다.")
 
-sorted_slots = sorted(
-    candidates.keys(),
-    key=lambda k: abs((dt.datetime.strptime(k, "%Y%m%d%H%M") - now_naive).total_seconds())
-    if dt.datetime.strptime(k, "%Y%m%d%H%M") >= now_naive
-    else 10**18
-)
-chosen_key = sorted_slots[0]
-chosen_dt = dt.datetime.strptime(chosen_key, "%Y%m%d%H%M")
-slot_items = candidates[chosen_key]
+    sorted_slots = sorted(
+        candidates.keys(),
+        key=lambda k: abs((dt.datetime.strptime(k, "%Y%m%d%H%M") - now_naive).total_seconds())
+        if dt.datetime.strptime(k, "%Y%m%d%H%M") >= now_naive
+        else 10**18
+    )
+    chosen_key = sorted_slots[0]
+    chosen_dt = dt.datetime.strptime(chosen_key, "%Y%m%d%H%M")
+    slot_items = candidates[chosen_key]
 
-vals = {}
-for it in slot_items:
-    cat = it.get("category")
-    v = it.get("fcstValue")
-    if cat and v is not None:
-        vals[cat] = v
+    vals = {}
+    for it in slot_items:
+        cat = it.get("category")
+        v = it.get("fcstValue")
+        if cat and v is not None:
+            vals[cat] = v
 
-temp_c = None
-if "TMP" in vals:
-    try:
-        temp_c = int(float(vals["TMP"]))
-    except Exception:
-        temp_c = None
+    temp_c = None
+    if "TMP" in vals:
+        try:
+            temp_c = int(float(vals["TMP"]))
+        except Exception:
+            temp_c = None
 
-pty = str(vals.get("PTY", "0")).strip()
-precip = "없음"
-if pty == "0":
+    pty = str(vals.get("PTY", "0")).strip()
     precip = "없음"
-elif pty == "1":
-    precip = "비"
-elif pty == "2":
-    precip = "비/눈"
-elif pty == "3":
-    precip = "눈"
-elif pty == "4":
-    precip = "비"
+    if pty == "0":
+        precip = "없음"
+    elif pty == "1":
+        precip = "비"
+    elif pty == "2":
+        precip = "비/눈"
+    elif pty == "3":
+        precip = "눈"
+    elif pty == "4":
+        precip = "비"
 
-wind_level = 3
-if "WSD" in vals:
-    try:
-        wsd = float(vals["WSD"])
-        wind_level = int(max(0, min(10, round(wsd * 1.2))))
-    except Exception:
-        wind_level = 3
+    wind_level = 3
+    if "WSD" in vals:
+        try:
+            wsd = float(vals["WSD"])
+            wind_level = int(max(0, min(10, round(wsd * 1.2))))
+        except Exception:
+            wind_level = 3
 
-pop = None
-if "POP" in vals:
-    try:
-        pop = int(float(vals["POP"]))
-    except Exception:
-        pop = None
+    pop = None
+    if "POP" in vals:
+        try:
+            pop = int(float(vals["POP"]))
+        except Exception:
+            pop = None
 
-weather = {
-    "temp_c": temp_c if temp_c is not None else 10,
-    "precip": precip,
-    "wind_level": wind_level,
-    "source": "KMA:getVilageFcst",
-    "base_date": base_date,
-    "base_time": base_time,
-    "fcst_at": chosen_dt.strftime("%Y-%m-%d %H:%M"),
-    "nx": nx,
-    "ny": ny,
-    "pop_percent": pop,
-}
-return weather
+    weather = {
+        "temp_c": temp_c if temp_c is not None else 10,
+        "precip": precip,
+        "wind_level": wind_level,
+        "source": "KMA:getVilageFcst",
+        "base_date": base_date,
+        "base_time": base_time,
+        "fcst_at": chosen_dt.strftime("%Y-%m-%d %H:%M"),
+        "nx": nx,
+        "ny": ny,
+        "pop_percent": pop,
+    }
+    return weather
+
 
 
 
@@ -1261,6 +1261,7 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
 
 
 
