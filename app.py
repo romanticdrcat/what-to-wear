@@ -290,6 +290,7 @@ def init_db() -> None:
             fit TEXT,
             flashiness INTEGER, -- 0~10
             tags_json TEXT,     -- ["봄","미니멀","캐주얼"] etc
+            owned INTEGER DEFAULT 1,  -- ✅ [추가] 1=있음, 0=없음
             created_at TEXT
         )
         """
@@ -331,6 +332,11 @@ def init_db() -> None:
         )
         """
     )
+    # ✅ [추가] 기존 DB에 owned 컬럼이 없으면 추가(마이그레이션)
+    try:
+        cur.execute("ALTER TABLE closet_items ADD COLUMN owned INTEGER DEFAULT 1")
+    except Exception:
+        pass
 
     conn.commit()
     conn.close()
@@ -429,6 +435,28 @@ def update_item(item_id: str, patch: dict) -> None:
     cur.execute(f"UPDATE closet_items SET {', '.join(sets)} WHERE id=?", tuple(vals))
     conn.commit()
     conn.close()
+
+def set_item_owned(item_id: str, owned: bool) -> None:
+    conn = db()
+    cur = conn.cursor()
+    cur.execute("UPDATE closet_items SET owned=? WHERE id=?", (1 if owned else 0, item_id))
+    conn.commit()
+    conn.close()
+
+
+def list_owned_closet_items() -> List[dict]:
+    conn = db()
+    cur = conn.cursor()
+    rows = cur.execute(
+        "SELECT * FROM closet_items WHERE IFNULL(owned,1)=1 ORDER BY created_at DESC"
+    ).fetchall()
+    conn.close()
+    out = []
+    for r in rows:
+        d = dict(r)
+        d["tags"] = json.loads(d["tags_json"]) if d.get("tags_json") else []
+        out.append(d)
+    return out
 
 
 def save_outfit(outfit: dict) -> None:
@@ -1053,7 +1081,7 @@ def tab_recommend(profile: dict, api_key: str, weather: dict) -> None:
     if "current_outfit" not in st.session_state:
         st.session_state["current_outfit"] = None
 
-    closet_items = list_closet_items()
+    closet_items = list_owned_closet_items()
     closet_lookup = {it["id"]: it for it in closet_items}
     pref_summary = get_preference_summary()
 
@@ -1096,27 +1124,59 @@ def tab_recommend(profile: dict, api_key: str, weather: dict) -> None:
 
     outfit = st.session_state["current_outfit"]
     if outfit:
+        # ✅ 코디 카드(기존 HTML 카드)
         render_outfit_card(outfit)
-
-        c1, c2 = st.columns(2)
-        with c1:
+    
+        st.markdown("#### 이 코디 아이템들, 실제로 있어?")
+    
+        # ✅ 아이템별 있어/없어 체크박스
+        missing_ids: List[str] = []
+        for it in outfit["items"]:
+            # 각 아이템 체크박스 key는 유니크해야 함
+            k = f"ownchk_{outfit['id']}_{it['id']}"
+            has_it = st.checkbox(f"{it['name']}", value=True, key=k)
+            if not has_it:
+                missing_ids.append(it["id"])
+    
+        # ✅ 버튼 3개: 별로야 / 나 이거 없어! / 이걸로 할래
+        b1, bmid, b2 = st.columns([1, 1.2, 1])
+    
+        with b1:
             if st.button("별로야"):
                 keys = preference_keys_from_outfit_items(outfit["items"], closet_lookup)
                 bump_preference(keys, delta=-0.2)
                 refresh_reco()
                 st.rerun()
-
-        with c2:
+    
+        with bmid:
+            # missing_ids가 있을 때만 의미가 있으니 disabled 처리
+            if st.button("나 이거 없어!", disabled=(len(missing_ids) == 0)):
+                # ✅ DB 반영: 체크 해제된 아이템은 owned=0 처리
+                for iid in missing_ids:
+                    set_item_owned(iid, owned=False)
+    
+                # ✅ 즉시 새로고침: 현재 코디 버리고 다시 추천
+                st.session_state["current_outfit"] = None
+                st.success("없는 아이템을 옷장에서 제외했다. 새 코디 뽑는 중...")
+                st.rerun()
+    
+        with b2:
             if st.button("이걸로 할래"):
                 save_outfit(outfit)
                 st.success("오늘의 코디 완료!")
                 keys = preference_keys_from_outfit_items(outfit["items"], closet_lookup)
                 bump_preference(keys, delta=0.6)
                 st.session_state["current_outfit"] = None
+                st.rerun()
+
 
 
 def simple_rule_based_outfit(situation: str, closet_items: List[dict], weather: dict) -> dict:
+    # ✅ [추가] '없는 옷(owned=0)'은 규칙 추천에서도 제외
+    closet_items = [x for x in closet_items if int(x.get("owned", 1)) == 1]
+    
     temp = weather.get("temp_c", 10)
+
     need_outer = temp <= 12 or weather.get("wind_level", 0) >= 7
 
     def pick(cat: str) -> Optional[dict]:
@@ -1253,6 +1313,7 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
 
 
 
