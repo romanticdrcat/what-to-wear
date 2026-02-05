@@ -12,6 +12,8 @@ from streamlit_geolocation import streamlit_geolocation
 
 # [추가] 기상청 호출용
 import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 from zoneinfo import ZoneInfo
 import math
 
@@ -107,6 +109,23 @@ def _safe_get(d: dict, path: List[str], default=None):
             return default
         cur = cur[p]
     return cur
+
+# [추가] requests 재시도 세션(공공 API 타임아웃/일시 장애 대비)
+def _requests_session() -> requests.Session:
+    s = requests.Session()
+    retry = Retry(
+        total=3,
+        connect=3,
+        read=3,
+        backoff_factor=0.5,
+        status_forcelist=[429, 500, 502, 503, 504],
+        allowed_methods=["GET"],
+        raise_on_status=False,
+    )
+    adapter = HTTPAdapter(max_retries=retry)
+    s.mount("https://", adapter)
+    s.mount("http://", adapter)
+    return s
 
 
 def fetch_vilage_fcst_weather(
@@ -1236,5 +1255,6 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
 
 
