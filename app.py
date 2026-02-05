@@ -164,14 +164,16 @@ def fetch_vilage_fcst_weather(
         "ny": str(ny),
     }
 
-    if already_encoded:
-        # URL에 serviceKey를 그대로 넣고 나머지만 params로
-        url = f"{KMA_VILAGE_BASE_URL}?serviceKey={service_key}"
-        params2 = params.copy()
-        params2.pop("serviceKey", None)
-        r = requests.get(url, params=params2, timeout=timeout)
-    else:
-        r = requests.get(KMA_VILAGE_BASE_URL, params=params, timeout=timeout)
+sess = _requests_session()
+
+if already_encoded:
+    url = f"{KMA_VILAGE_BASE_URL}?serviceKey={service_key}"
+    params2 = params.copy()
+    params2.pop("serviceKey", None)
+    r = sess.get(url, params=params2, timeout=(5, 25))  # [수정] connect 5s, read 25s
+else:
+    r = sess.get(KMA_VILAGE_BASE_URL, params=params, timeout=(5, 25))  # [수정]
+
 
     r.raise_for_status()
     payload = r.json()
@@ -858,6 +860,16 @@ def _maybe_autofetch_weather(
 
     last_fetch = st.session_state.get("kma_last_fetch")
     now = dt.datetime.now()
+        # [추가] 방금 실패했다면(3분) 자동 재시도하지 않음
+    last_fail = st.session_state.get("kma_last_fail")
+    if last_fail:
+        try:
+            fail_at = dt.datetime.fromisoformat(last_fail["at"])
+        except Exception:
+            fail_at = None
+        if fail_at and (now - fail_at).total_seconds() < 3 * 60:
+            return
+
     if last_fetch:
         try:
             last_at = dt.datetime.fromisoformat(last_fetch["at"])
@@ -892,7 +904,7 @@ def _maybe_autofetch_weather(
     except Exception as e:
         st.sidebar.error(f"자동 기상청 호출 실패: {e}")
         st.sidebar.info("임시 입력 값으로 계속 진행한다.")
-
+        st.sidebar.info("임시 입력 값으로 계속 진행한다.")
 
 def sidebar_controls(profile: dict) -> Dict[str, Any]:
     st.sidebar.header("설정")
@@ -1255,6 +1267,7 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
 
 
 
