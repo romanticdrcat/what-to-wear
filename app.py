@@ -1103,8 +1103,6 @@ def tab_analysis(weather: dict) -> None:
 
 def tab_closet() -> None:
     st.subheader("내 옷장")
-def tab_closet() -> None:
-    st.subheader("내 옷장")
 
     # ✅ [추가] 새 아이템 추가
     with st.expander("➕ 새 아이템 추가", expanded=False):
@@ -1481,6 +1479,7 @@ def main() -> None:
             
 if __name__ == "__main__":
     main()
+
 
 
 
