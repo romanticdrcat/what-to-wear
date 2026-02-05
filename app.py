@@ -823,7 +823,6 @@ def _maybe_autofetch_weather(
     rain: str,
     wind: int,
 ) -> None:
-return
     if not lat.strip() or not lon.strip():
         return
     try:
@@ -831,6 +830,7 @@ return
         _lon = float(lon.strip())
     except ValueError:
         return
+
 
     last_fetch = st.session_state.get("kma_last_fetch")
     now = dt.datetime.now()
@@ -1249,6 +1249,7 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
 
 
 
