@@ -1412,8 +1412,6 @@ def main() -> None:
     render_order.remove(default_idx)
     render_order = [default_idx] + render_order
 
-    tabs = st.tabs(["내 옷장", "코디 추천", "오늘의 코디 모음", "분석"])
-
     tab_handlers = [
         lambda: tab_closet(),
         lambda: tab_recommend(profile, api_key, weather),
@@ -1427,5 +1425,6 @@ def main() -> None:
             
 if __name__ == "__main__":
     main()
+
 
 
