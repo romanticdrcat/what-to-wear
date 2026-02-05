@@ -831,7 +831,7 @@ with rowR:
         owned_db = int(closet_lookup.get(iid, {}).get("owned", 1)) == 1
         owned_now = st.session_state[state_key].get(iid, owned_db)
 
-        left, right = st.columns([0.78, 0.22], vertical_alignment="center")
+        left, right = st.columns([0.80, 0.20], gap="small", vertical_alignment="center")
 
         with left:
             st.markdown(
@@ -1403,6 +1403,7 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
 
 
 
