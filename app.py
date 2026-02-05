@@ -812,6 +812,15 @@ def render_outfit_card_with_toggles_buffered(
         f'<div class="outfit-meta">상황: {outfit["situation"]} · 날짜: {outfit["date"]}</div>',
         unsafe_allow_html=True,
     )
+    # ✅ [추가] 토글 열 헤더(오른쪽 정렬)
+    h_left, h_right = st.columns([0.78, 0.22], vertical_alignment="center")
+    with h_left:
+        st.write("")  # 왼쪽은 비워둠(정렬용)
+    with h_right:
+        st.markdown(
+            '<div style="text-align:right; font-size:12px; color:#666; font-weight:700;">이 옷 있어!</div>',
+            unsafe_allow_html=True,
+        )
 
     missing_ids: List[str] = []
 
@@ -1394,6 +1403,7 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
 
 
 
