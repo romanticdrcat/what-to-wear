@@ -133,12 +133,9 @@ def fetch_vilage_fcst_weather(
     lon: float,
     timeout: int = 10,
 ) -> dict:
-
     """
-    기상청 단기예보(getVilageFcst)에서 '지금 시각에 가장 가까운 1시간 예보'를 뽑아서
-    앱이 쓰는 weather dict(temp_c, precip, wind_level)로 변환한다.
-
-    사용 카테고리: TMP(기온), PTY(강수형태), POP(강수확률), WSD(풍속) 등. :contentReference[oaicite:6]{index=6}
+    프록시(KMA_VILAGE_BASE_URL)를 통해 단기예보(getVilageFcst)를 호출하고,
+    '지금 시각에 가장 가까운 1시간 예보'를 뽑아 weather dict로 변환한다.
     """
 
     kst = ZoneInfo("Asia/Seoul")
@@ -146,26 +143,18 @@ def fetch_vilage_fcst_weather(
     base_date, base_time = _kma_base_datetime_kst(now)
     nx, ny = latlon_to_grid(lat, lon)
 
-params = {
-    "pageNo": "1",
-    "numOfRows": "1000",
-    "dataType": "JSON",
-    "base_date": base_date,
-    "base_time": base_time,
-    "nx": str(nx),
-    "ny": str(ny),
-}
-
+    params = {
+        "pageNo": "1",
+        "numOfRows": "1000",
+        "dataType": "JSON",
+        "base_date": base_date,
+        "base_time": base_time,
+        "nx": str(nx),
+        "ny": str(ny),
+    }
 
     sess = _requests_session()
-
-    if already_encoded:
-        url = f"{KMA_VILAGE_BASE_URL}?serviceKey={service_key}"
-        params2 = params.copy()
-        params2.pop("serviceKey", None)
-        r = sess.get(url, params=params2, timeout=(5, 25))  # connect 5s, read 25s
-    else:
-        r = sess.get(KMA_VILAGE_BASE_URL, params=params, timeout=(5, 25))
+    r = sess.get(KMA_VILAGE_BASE_URL, params=params, timeout=(5, 25))
 
     r.raise_for_status()
     payload = r.json()
@@ -179,7 +168,6 @@ params = {
     if not items:
         raise RuntimeError("KMA API returned no items.")
 
-    # 예보는 fcstDate+fcstTime 단위로 나온다. 지금 시각과 가장 가까운 (미래 우선) 1시간 슬롯을 고른다.
     now_naive = now.replace(tzinfo=None)
     candidates = {}
     for it in items:
@@ -251,7 +239,7 @@ params = {
         "temp_c": temp_c if temp_c is not None else 10,
         "precip": precip,
         "wind_level": wind_level,
-        "source": "KMA:getVilageFcst",
+        "source": "KMA:getVilageFcst(PROXY)",
         "base_date": base_date,
         "base_time": base_time,
         "fcst_at": chosen_dt.strftime("%Y-%m-%d %H:%M"),
@@ -260,6 +248,7 @@ params = {
         "pop_percent": pop,
     }
     return weather
+
 
 
 
@@ -828,15 +817,13 @@ def make_fallback_closet(profile: dict) -> List[dict]:
 # (기존 '임시 입력'은 그대로 두고, KMA가 성공하면 그 값을 override)
 # =========================
 def _maybe_autofetch_weather(
-    kma_key: str,
     lat: str,
     lon: str,
     temp: int,
     rain: str,
     wind: int,
 ) -> None:
-    if not kma_key.strip():
-        return
+return
     if not lat.strip() or not lon.strip():
         return
     try:
@@ -908,7 +895,7 @@ def sidebar_controls(profile: dict) -> Dict[str, Any]:
     # [추가] apis.data.go.kr 네트워크 연결 테스트
     if st.sidebar.button("🔎 apis.data.go.kr 연결 테스트"):
         try:
-            test = requests.get("https://apis.data.go.kr", timeout=(5, 10))
+            test = requests.get("https://kma-proxy-worker.pages.dev", timeout=(5, 10))
             st.sidebar.success(f"연결 OK: HTTP {test.status_code}")
         except Exception as e:
             st.sidebar.error(f"연결 실패(네트워크): {e}")
@@ -948,7 +935,7 @@ def sidebar_controls(profile: dict) -> Dict[str, Any]:
     if "weather_live" not in st.session_state:
         st.session_state["weather_live"] = {"temp_c": temp, "precip": rain, "wind_level": wind}
 
-    _maybe_autofetch_weather(kma_key, lat, lon, temp, rain, wind)
+    _maybe_autofetch_weather(lat, lon, temp, rain, wind)
 
     # 기상청 fetch 시도
     if fetch:
@@ -1262,6 +1249,7 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
 
 
 
