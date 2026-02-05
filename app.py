@@ -812,16 +812,17 @@ def render_outfit_card_with_toggles_buffered(
         f'<div class="outfit-meta">상황: {outfit["situation"]} · 날짜: {outfit["date"]}</div>',
         unsafe_allow_html=True,
     )
-# ✅ [수정] 토글 열 헤더(토글과 같은 컬럼 비율로 맞춤)
-rowL, rowR = st.columns([0.80, 0.20], gap="small", vertical_alignment="center")
-with rowL:
-    st.write("")  # 왼쪽은 비움
-with rowR:
-    st.markdown(
-        '<div style="text-align:left; font-size:12px; color:#666; font-weight:700; padding-left:6px;">이 옷 있어!</div>',
-        unsafe_allow_html=True,
-    )
+    # ✅ [수정] 토글 열 헤더(토글과 같은 컬럼 비율로 맞춤)
+    rowL, rowR = st.columns([0.80, 0.20], gap="small", vertical_alignment="center")
+    with rowL:
+        st.write("")  # 왼쪽은 비움
+    with rowR:
+        st.markdown(
+            '<div style="text-align:left; font-size:12px; color:#666; font-weight:700; padding-left:6px;">이 옷 있어!</div>',
+            unsafe_allow_html=True,
+        )
 
+    # ✅ 헤더 아래에서 실제 토글 목록 렌더링 (헤더 with rowR 밖!)
     missing_ids: List[str] = []
 
     for itref in outfit.get("items", []):
@@ -853,7 +854,8 @@ with rowR:
 
     st.markdown("</div>", unsafe_allow_html=True)
 
-        return missing_ids
+    return missing_ids
+
 
 def onboarding_screen() -> None:
     st.title(APP_TITLE)
@@ -1402,6 +1404,7 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
 
 
 
