@@ -853,8 +853,7 @@ with rowR:
 
     st.markdown("</div>", unsafe_allow_html=True)
 
-    return missing_ids
-
+return missing_ids
 
 def onboarding_screen() -> None:
     st.title(APP_TITLE)
@@ -1403,6 +1402,7 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
 
 
 
