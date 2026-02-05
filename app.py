@@ -962,20 +962,23 @@ def sidebar_controls(profile: dict) -> Dict[str, Any]:
             st.sidebar.error(f"기상청 호출 실패: {e}")
             st.sidebar.info("임시 입력 값으로 계속 진행한다.")
 
-    # 화면 표시용(현재 반영된 날씨)
-    st.sidebar.write("**현재 반영된 날씨**")
-    st.sidebar.write(st.session_state["weather_live"])
+    return {"api_key": api_key, "weather": st.session_state["weather_live"]}
 
-    st.sidebar.divider()
-    st.sidebar.subheader("학습된 취향(요약)")
+
+def tab_analysis(weather: dict) -> None:
+    st.subheader("분석")
+    st.caption("현재 반영된 날씨와 학습된 취향을 요약해서 보여준다.")
+
+    st.markdown("#### 현재 반영된 날씨")
+    st.json(weather)
+
+    st.markdown("#### 학습된 취향(요약)")
     prefs = get_preference_summary()
     if prefs:
         for k, s in prefs:
-            st.sidebar.write(f"- {k} : {s:.2f}")
+            st.write(f"- {k} : {s:.2f}")
     else:
-        st.sidebar.write("아직 데이터가 없다.")
-
-    return {"api_key": api_key, "weather": st.session_state["weather_live"]}
+        st.write("아직 데이터가 없다.")
 
 
 
@@ -1235,7 +1238,7 @@ def main() -> None:
 
     ensure_initial_closet(profile, api_key)
 
-    tabs = st.tabs(["내 옷장", "코디 추천", "오늘의 코디 모음"])
+    tabs = st.tabs(["내 옷장", "코디 추천", "오늘의 코디 모음", "분석"])
 
     with tabs[0]:
         tab_closet()
@@ -1245,6 +1248,9 @@ def main() -> None:
 
     with tabs[2]:
         tab_today_collection()
+
+    with tabs[3]:
+        tab_analysis(weather)
 
 
 if __name__ == "__main__":
