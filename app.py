@@ -297,6 +297,13 @@ def init_db() -> None:
         )
         """
     )
+
+    # ✅ [추가] owned 컬럼이 없으면 추가 (기존 DB 마이그레이션)
+cols = cur.execute("PRAGMA table_info(closet_items)").fetchall()
+col_names = {c[1] for c in cols}
+if "owned" not in col_names:
+    cur.execute("ALTER TABLE closet_items ADD COLUMN owned INTEGER DEFAULT 1")
+
     try:
         cur.execute("ALTER TABLE closet_items ADD COLUMN owned INTEGER DEFAULT 1")
     except Exception:
@@ -409,10 +416,11 @@ def insert_closet_items(items: List[dict]) -> None:
                 it.get("fit"),
                 int(it.get("flashiness", 3)),
                 json.dumps(it.get("tags", []), ensure_ascii=False),
-                int(it.get("owned", 1)), 
+                int(it.get("owned", 1)),
                 now,
             ),
         )
+
     conn.commit()
     conn.close()
 
@@ -1095,6 +1103,54 @@ def tab_analysis(weather: dict) -> None:
 
 def tab_closet() -> None:
     st.subheader("내 옷장")
+    def tab_closet() -> None:
+    st.subheader("내 옷장")
+
+    # ✅ [추가] 새 아이템 추가
+    with st.expander("➕ 새 아이템 추가", expanded=False):
+        with st.form("add_item_form", clear_on_submit=True):
+            name = st.text_input("아이템명", placeholder="예: 검정 니트")
+            category = st.selectbox("카테고리", ["top", "bottom", "outer", "shoes", "bag", "accessory"])
+            color = st.text_input("컬러(영문 소문자)", placeholder="black / white / navy ...")
+            length = st.selectbox("기장", ["short", "regular", "long"], index=1)
+            fit = st.selectbox("핏", ["slim", "regular", "oversized", "wide"], index=1)
+            flash = st.slider("화려함(0~10)", 0, 10, 2)
+            tags_str = st.text_input("태그(쉼표로 구분)", placeholder="예: 데일리,미니멀,봄가을")
+
+            submitted = st.form_submit_button("추가하기")
+
+        if submitted:
+            if not name.strip():
+                st.error("아이템명은 필수다.")
+                st.stop()
+
+            # ✅ id 자동 생성
+            new_id = f"itm_user_{dt.datetime.now().strftime('%Y%m%d_%H%M%S_%f')}"
+
+            new_item = {
+                "id": new_id,
+                "name": name.strip(),
+                "category": category,
+                "color": color.strip().lower(),
+                "length": length,
+                "fit": fit,
+                "flashiness": int(flash),
+                "tags": [t.strip() for t in tags_str.split(",") if t.strip()],
+                "owned": 1,  # ✅ 기본: 있음
+            }
+
+            insert_closet_items([new_item])
+            st.success("추가했다.")
+            st.rerun()
+
+    items = list_closet_items()
+    if not items:
+        st.info("옷장이 비어 있다.")
+        return
+
+    cols = st.columns(3)
+    ...
+
     items = list_closet_items()
     if not items:
         st.info("옷장이 비어 있다.")
@@ -1425,6 +1481,7 @@ def main() -> None:
             
 if __name__ == "__main__":
     main()
+
 
 
 
