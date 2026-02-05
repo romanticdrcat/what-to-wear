@@ -268,6 +268,7 @@ def init_db() -> None:
     conn = db()
     cur = conn.cursor()
 
+    # 1) 프로필 테이블
     cur.execute(
         """
         CREATE TABLE IF NOT EXISTS user_profile (
@@ -281,6 +282,7 @@ def init_db() -> None:
         """
     )
 
+    # 2) 옷장 테이블 (owned 포함)
     cur.execute(
         """
         CREATE TABLE IF NOT EXISTS closet_items (
@@ -292,23 +294,19 @@ def init_db() -> None:
             fit TEXT,
             flashiness INTEGER, -- 0~10
             tags_json TEXT,     -- ["봄","미니멀","캐주얼"] etc
-            owned INTEGER DEFAULT 1,  -- ✅ [추가] 1=있음, 0=없음
+            owned INTEGER DEFAULT 1,  -- ✅ 1=있음, 0=없음
             created_at TEXT
         )
         """
     )
 
-    # ✅ [추가] owned 컬럼이 없으면 추가 (기존 DB 마이그레이션)
-cols = cur.execute("PRAGMA table_info(closet_items)").fetchall()
-col_names = {c[1] for c in cols}
-if "owned" not in col_names:
-    cur.execute("ALTER TABLE closet_items ADD COLUMN owned INTEGER DEFAULT 1")
-
-    try:
+    # 2-1) ✅ 기존 DB 마이그레이션: owned 컬럼 없으면 추가
+    cols = cur.execute("PRAGMA table_info(closet_items)").fetchall()
+    col_names = {c[1] for c in cols}
+    if "owned" not in col_names:
         cur.execute("ALTER TABLE closet_items ADD COLUMN owned INTEGER DEFAULT 1")
-    except Exception:
-        pass
 
+    # 3) 코디 저장 테이블
     cur.execute(
         """
         CREATE TABLE IF NOT EXISTS outfits (
@@ -324,6 +322,7 @@ if "owned" not in col_names:
         """
     )
 
+    # 4) 피드백 테이블
     cur.execute(
         """
         CREATE TABLE IF NOT EXISTS outfit_feedback (
@@ -337,6 +336,7 @@ if "owned" not in col_names:
         """
     )
 
+    # 5) 선호 학습 테이블
     cur.execute(
         """
         CREATE TABLE IF NOT EXISTS preference_memory (
@@ -345,14 +345,10 @@ if "owned" not in col_names:
         )
         """
     )
-    # ✅ [추가] 기존 DB에 owned 컬럼이 없으면 추가(마이그레이션)
-    try:
-        cur.execute("ALTER TABLE closet_items ADD COLUMN owned INTEGER DEFAULT 1")
-    except Exception:
-        pass
 
     conn.commit()
     conn.close()
+
 
 
 def get_profile() -> Optional[dict]:
@@ -1479,6 +1475,7 @@ def main() -> None:
             
 if __name__ == "__main__":
     main()
+
 
 
 
