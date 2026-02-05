@@ -819,6 +819,62 @@ def make_fallback_closet(profile: dict) -> List[dict]:
 # [수정] sidebar_controls: 기상청 키+위경도 입력 & 호출 버튼 추가
 # (기존 '임시 입력'은 그대로 두고, KMA가 성공하면 그 값을 override)
 # =========================
+def _maybe_autofetch_weather(
+    kma_key: str,
+    lat: str,
+    lon: str,
+    temp: int,
+    rain: str,
+    wind: int,
+) -> None:
+    if not kma_key.strip():
+        return
+    if not lat.strip() or not lon.strip():
+        return
+    try:
+        _lat = float(lat.strip())
+        _lon = float(lon.strip())
+    except ValueError:
+        return
+
+    last_fetch = st.session_state.get("kma_last_fetch")
+    now = dt.datetime.now()
+    if last_fetch:
+        try:
+            last_at = dt.datetime.fromisoformat(last_fetch["at"])
+        except Exception:
+            last_at = None
+        if (
+            last_at
+            and abs((now - last_at).total_seconds()) < 30 * 60
+            and float(last_fetch.get("lat", 0)) == _lat
+            and float(last_fetch.get("lon", 0)) == _lon
+        ):
+            return
+
+    try:
+        with st.spinner("기상청 단기예보 자동 불러오는 중..."):
+            w = fetch_vilage_fcst_weather(service_key=kma_key.strip(), lat=_lat, lon=_lon)
+
+        st.session_state["weather_live"] = {
+            "temp_c": int(w.get("temp_c", temp)),
+            "precip": str(w.get("precip", rain)),
+            "wind_level": int(w.get("wind_level", wind)),
+            "source": w.get("source"),
+            "base_date": w.get("base_date"),
+            "base_time": w.get("base_time"),
+            "fcst_at": w.get("fcst_at"),
+            "pop_percent": w.get("pop_percent"),
+            "nx": w.get("nx"),
+            "ny": w.get("ny"),
+        }
+        st.session_state["kma_last_fetch"] = {"lat": _lat, "lon": _lon, "at": now.isoformat()}
+        st.sidebar.success(f"자동 반영: {st.session_state['weather_live'].get('fcst_at')} 예보 기준")
+    except Exception as e:
+        st.sidebar.error(f"자동 기상청 호출 실패: {e}")
+        st.sidebar.info("임시 입력 값으로 계속 진행한다.")
+
+
 def sidebar_controls(profile: dict) -> Dict[str, Any]:
     st.sidebar.header("설정")
     api_key = st.sidebar.text_input(
@@ -836,7 +892,12 @@ def sidebar_controls(profile: dict) -> Dict[str, Any]:
     # ---- 내 위치(온보딩에서 허용한 경우에만) ----
     if int(profile.get("location_allowed", 0)) == 1:
         st.sidebar.subheader("내 위치")
-        if st.sidebar.button("내 위치 가져오기"):
+        loc = streamlit_geolocation()
+        if loc and loc.get("latitude") and loc.get("longitude"):
+            st.session_state["geo_lat"] = str(loc["latitude"])
+            st.session_state["geo_lon"] = str(loc["longitude"])
+            st.sidebar.success("위치 가져왔다.")
+        elif st.sidebar.button("내 위치 새로고침"):
             loc = streamlit_geolocation()
             if loc and loc.get("latitude") and loc.get("longitude"):
                 st.session_state["geo_lat"] = str(loc["latitude"])
@@ -860,6 +921,8 @@ def sidebar_controls(profile: dict) -> Dict[str, Any]:
     # 세션에 날씨 저장(추천 탭에서 재사용)
     if "weather_live" not in st.session_state:
         st.session_state["weather_live"] = {"temp_c": temp, "precip": rain, "wind_level": wind}
+
+    _maybe_autofetch_weather(kma_key, lat, lon, temp, rain, wind)
 
     # 기상청 fetch 시도
     if fetch:
