@@ -267,7 +267,7 @@ weather = {
     "ny": ny,
     "pop_percent": pop,
 }
-    return weather
+return weather
 
 
 
@@ -1261,6 +1261,7 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
 
 
 
