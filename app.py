@@ -911,6 +911,15 @@ def sidebar_controls(profile: dict) -> Dict[str, Any]:
 
     # ---- 기상청 ----
     st.sidebar.subheader("기상청 단기예보 (getVilageFcst)")
+    
+    # [추가] apis.data.go.kr 네트워크 연결 테스트
+    if st.sidebar.button("🔎 apis.data.go.kr 연결 테스트"):
+        try:
+            test = requests.get("https://apis.data.go.kr", timeout=(5, 10))
+            st.sidebar.success(f"연결 OK: HTTP {test.status_code}")
+        except Exception as e:
+            st.sidebar.error(f"연결 실패(네트워크): {e}")
+
     st.sidebar.caption("serviceKey + 위경도(lat, lon)를 넣고 불러오면 자동으로 날씨가 반영된다.")
     kma_key = st.sidebar.text_input("기상청 serviceKey", type="password")
 
@@ -1261,6 +1270,7 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
 
 
 
