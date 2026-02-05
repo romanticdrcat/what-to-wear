@@ -1424,5 +1424,8 @@ def main() -> None:
     for i in render_order:
         with tabs[i]:
             tab_handlers[i]()
+            
+if __name__ == "__main__":
+    main()
 
 
