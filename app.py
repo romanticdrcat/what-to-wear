@@ -27,7 +27,7 @@ APP_TITLE = "오늘 뭐 입지"
 DB_PATH = "ready_to_wear.sqlite"
 
 # [추가] 기상청 단기예보(동네예보) 엔드포인트
-KMA_VILAGE_BASE_URL = "http://apis.data.go.kr/1360000/VilageFcstInfoService_2.0/getVilageFcst"
+KMA_VILAGE_BASE_URL = "https://apis.data.go.kr/1360000/VilageFcstInfoService_2.0/getVilageFcst"
 
 
 # =========================
@@ -1236,4 +1236,5 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
 
