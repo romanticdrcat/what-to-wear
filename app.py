@@ -879,6 +879,15 @@ def onboarding_screen() -> None:
         )
         location_allowed = st.checkbox("위치 정보 허용(허용하면 자동으로 날씨를 불러온다)", value=True)
 
+        # ✅ [추가] 온보딩에서 API 키 필수 입력 (여기 위치가 제일 깔끔함)
+        onboard_api_key = st.text_input(
+            "OpenAI API 키 (필수)",
+            type="password",
+            value=st.session_state.get("openai_api_key", ""),
+            help="키는 DB에 저장하지 않고 세션에만 보관한다.",
+        )
+
+
         # ✅ 여기: 체크하면 바로 브라우저 권한 요청이 뜨도록 컴포넌트를 렌더링
         loc = None
         if location_allowed:
@@ -894,6 +903,19 @@ def onboarding_screen() -> None:
 
     if submitted:
         upsert_profile(int(age), gender, closet_style, bool(location_allowed))
+
+    if submitted:
+    # ✅ [추가] 키 없으면 온보딩 통과 불가
+    if not onboard_api_key.strip():
+        st.error("OpenAI API 키를 입력해야 넘어갈 수 있다.")
+        return
+
+    # ✅ [추가] 세션에 저장(사이드바에 자동으로 채워지게)
+    st.session_state["openai_api_key"] = onboard_api_key.strip()
+
+    upsert_profile(int(age), gender, closet_style, bool(location_allowed))
+    ...
+
 
         # ✅ 여기: 온보딩 끝날 때 위경도를 세션에 저장해둔다.
         if location_allowed and loc and loc.get("latitude") and loc.get("longitude"):
@@ -1037,11 +1059,21 @@ def _maybe_autofetch_weather(
 
 def sidebar_controls(profile: dict) -> Dict[str, Any]:
     st.sidebar.header("설정")
+
+    # ✅ [수정] 세션에 저장된 키를 기본값으로 넣기 + 사이드바에서 바꾸면 세션도 갱신
     api_key = st.sidebar.text_input(
         "OpenAI API 키",
         type="password",
-        help="키는 로컬/서버에 저장되지 않게 설계하는 편이 안전하다.",
+        value=st.session_state.get("openai_api_key", ""),
+        help="온보딩에서 입력한 키가 기본으로 들어간다.",
+        key="sidebar_openai_api_key",
     )
+    if api_key.strip():
+        st.session_state["openai_api_key"] = api_key.strip()
+
+    st.sidebar.divider()
+    ...
+
     st.sidebar.divider()
 
     # ---- 위치/날씨: 버튼 없이 자동 ----
@@ -1434,7 +1466,7 @@ def main() -> None:
         return
 
     settings = sidebar_controls(profile)
-    api_key = settings["api_key"]
+    api_key = (st.session_state.get("openai_api_key") or settings["api_key"] or "").strip()
     weather = settings["weather"]
 
     ensure_initial_closet(profile, api_key)
@@ -1475,6 +1507,7 @@ def main() -> None:
             
 if __name__ == "__main__":
     main()
+
 
 
 
