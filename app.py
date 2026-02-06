@@ -1197,6 +1197,41 @@ def sidebar_controls(profile: dict) -> Dict[str, Any]:
 
     return {"api_key": api_key, "weather": st.session_state["weather_live"]}
 
+    st.sidebar.divider()
+    st.sidebar.subheader("🧪 개발자/테스트")
+    
+    c1, c2 = st.sidebar.columns(2)
+    with c1:
+        if st.button("온보딩 다시하기"):
+            st.session_state["onboarded"] = False
+            st.session_state["current_outfit"] = None
+            st.rerun()
+    
+    with c2:
+        if st.button("키 저장 삭제"):
+            clear_api_key_localstorage()
+            st.session_state.pop("openai_api_key", None)
+            st.rerun()
+    
+    if st.button("⚠️ 전체 초기화(DB+세션+키)", type="primary"):
+        # DB 삭제
+        try:
+            import os
+            if os.path.exists(DB_PATH):
+                os.remove(DB_PATH)
+        except Exception as e:
+            st.sidebar.error(f"DB 삭제 실패: {e}")
+            st.stop()
+    
+        # 세션 초기화
+        st.session_state.clear()
+    
+        # localStorage 키 삭제
+        clear_api_key_localstorage()
+    
+        st.rerun()
+
+
 
 
 def tab_analysis(weather: dict) -> None:
@@ -1595,6 +1630,7 @@ def main() -> None:
             
 if __name__ == "__main__":
     main()
+
 
 
 
