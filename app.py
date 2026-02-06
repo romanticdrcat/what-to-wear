@@ -952,7 +952,7 @@ def render_outfit_card_with_toggles_buffered(
 
 def onboarding_screen() -> None:
     st.title(APP_TITLE)
-    st.caption("귀찮은 사람들을 위한 코디 추천 어플 "오늘 뭐 입지"입니다!")
+    st.caption("귀찮은 사람들을 위한 코디 추천 어플 ***오늘 뭐 입지***입니다!")
 
     with st.form("onboarding_form", clear_on_submit=False):
         age = st.number_input("나이", min_value=10, max_value=80, value=22, step=1)
@@ -1617,6 +1617,7 @@ def main() -> None:
             
 if __name__ == "__main__":
     main()
+
 
 
 
