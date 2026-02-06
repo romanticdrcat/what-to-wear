@@ -184,7 +184,7 @@ def fetch_vilage_fcst_weather(
         candidates.setdefault(key, []).append(it)
 
     if not candidates:
-        raise RuntimeError("예보 후보 슬롯을 찾지 못했다.")
+        raise RuntimeError("예보 후보 슬롯을 찾지 못했어요")
 
     sorted_slots = sorted(
         candidates.keys(),
@@ -605,7 +605,7 @@ def load_api_key_from_localstorage() -> None:
 
 
 def save_api_key_to_localstorage(api_key: str) -> None:
-    """온보딩에서 입력한 키를 localStorage에 저장한다."""
+    """온보딩에서 입력한 키를 localStorage에 저장해요"""
     components.html(
         f"""
         <script>
@@ -647,11 +647,11 @@ def safe_json_from_model(text: str) -> Any:
     start_arr = text.find("[")
     candidates = [p for p in [start_obj, start_arr] if p != -1]
     if not candidates:
-        raise ValueError("JSON을 찾지 못했다.")
+        raise ValueError("JSON을 찾지 못했어요")
     start = min(candidates)
     end = max(text.rfind("}"), text.rfind("]"))
     if end == -1 or end <= start:
-        raise ValueError("JSON 경계가 이상하다.")
+        raise ValueError("JSON 경계가 이상해요")
     return json.loads(text[start : end + 1])
 
 
@@ -705,7 +705,7 @@ def gpt_generate_initial_closet(
     )
     data = safe_json_from_model(resp.output_text)
     if not isinstance(data, list) or len(data) < 10:
-        raise ValueError("옷장 생성 결과 형식이 올바르지 않다.")
+        raise ValueError("옷장 생성 결과 형식이 올바르지 않아요")
     return data[:n_items]
 
 
@@ -776,7 +776,7 @@ def gpt_recommend_outfit(
     data = safe_json_from_model(resp.output_text)
 
     if not isinstance(data, dict) or "items" not in data:
-        raise ValueError("코디 추천 결과 형식이 올바르지 않다.")
+        raise ValueError("코디 추천 결과 형식이 올바르지 않아요")
 
     closet_ids = {it["id"] for it in closet_items}
     filtered = []
@@ -784,7 +784,7 @@ def gpt_recommend_outfit(
         if isinstance(it, dict) and it.get("id") in closet_ids:
             filtered.append({"id": it["id"], "name": it.get("name", "")})
     if len(filtered) < 2:
-        raise ValueError("옷장 기반 아이템 매칭에 실패했다.")
+        raise ValueError("옷장 기반 아이템 매칭에 실패했어요")
     data["items"] = filtered
     return data
 
@@ -952,7 +952,7 @@ def render_outfit_card_with_toggles_buffered(
 
 def onboarding_screen() -> None:
     st.title(APP_TITLE)
-    st.caption("귀찮은 사람들을 위한 코디 추천 어플이다. 최초 1회만 물어본다.")
+    st.caption("귀찮은 사람들을 위한 코디 추천 어플 "오늘 뭐 입지"입니다!")
 
     with st.form("onboarding_form", clear_on_submit=False):
         age = st.number_input("나이", min_value=10, max_value=80, value=22, step=1)
@@ -969,18 +969,18 @@ def onboarding_screen() -> None:
             "OpenAI API 키 (필수)",
             type="password",
             value=default_key,
-            help="온보딩을 넘어가려면 키가 필요하다. 입력한 키는 브라우저에만 저장한다.",
+            help="서비스를 이용하려면 API 키가 필요해요. 입력한 키는 브라우저에만 저장하니 걱정마세요!",
         )
 
         # 위치 렌더(권한 팝업)
         loc = None
         if location_allowed:
-            st.markdown("✅ 브라우저에서 위치 권한을 **허용**해라. (버튼 누를 필요 없다)")
+            st.markdown("✅ 브라우저에서 위치 권한을 허용해주세요")
             loc = streamlit_geolocation()
             if loc and loc.get("latitude") and loc.get("longitude"):
                 st.success(f"위치 확인됨: lat={loc['latitude']}, lon={loc['longitude']}")
             else:
-                st.info("아직 위치값을 못 받았다. 브라우저 팝업에서 허용했는지 확인해라.")
+                st.info("아직 위치값을 못 받어요. 브라우저 팝업에서 허용했는지 확인해주세요.")
 
         submitted = st.form_submit_button("시작하기")
 
@@ -989,7 +989,7 @@ def onboarding_screen() -> None:
 
     # ✅ 1) 키 검증 먼저 (프로필 저장 전에 막아야 함)
     if not onboard_api_key.strip():
-        st.error("OpenAI API 키를 입력해야 시작할 수 있다.")
+        st.error("OpenAI API 키를 입력해야 시작할 수 있어요")
         st.stop()
 
     # ✅ 2) 키 저장(세션 + localStorage)
@@ -1004,7 +1004,7 @@ def onboarding_screen() -> None:
         st.session_state["geo_lat"] = str(loc["latitude"])
         st.session_state["geo_lon"] = str(loc["longitude"])
 
-    st.success("온보딩 완료다. 이제 자동으로 날씨를 불러온다.")
+    st.success("초기 설정 완료입니다! 자동으로 날씨를 불러올게요")
     st.session_state["onboarded"] = True
     st.rerun()
 
@@ -1015,11 +1015,11 @@ def ensure_initial_closet(profile: dict, api_key: str) -> None:
     if len(items) >= 10:
         return
 
-    st.info("옷장을 초기 세팅하는 중이다. (처음 한 번만)")
+    st.info("옷장을 초기 세팅하는 중입니다. 처음 한 번만 소요되는 과정이에요!")
     if not api_key:
         sample = make_fallback_closet(profile)
         insert_closet_items(sample)
-        st.warning("API 키가 없어서 샘플 옷장으로 채웠다. 사이드바에 키 넣으면 더 정확해진다.")
+        st.warning("API 키가 없어서 샘플 옷장으로 채웠습니다. 사이드바에 키를 넣으면 더 정확한 추천을 받을 수 있어요")
         return
 
     try:
@@ -1033,12 +1033,12 @@ def ensure_initial_closet(profile: dict, api_key: str) -> None:
                 model="gpt-5-mini",
             )
         insert_closet_items(generated)
-        st.success("옷장 초기 아이템 30개 등록 완료다.")
+        st.success("나의 옷장 초기 아이템 30개 등록 완료!")
     except Exception as e:
-        st.error(f"옷장 생성에 실패했다: {e}")
+        st.error(f"옷장 생성에 실패했습니다: {e}")
         sample = make_fallback_closet(profile)
         insert_closet_items(sample)
-        st.warning("일단 샘플 옷장으로 채웠다. 나중에 다시 시도하면 된다.")
+        st.warning("일단 샘플 옷장으로 채웠어요. 나중에 다시 시도하면 되죠!")
 
 
 def make_fallback_closet(profile: dict) -> List[dict]:
@@ -1223,7 +1223,7 @@ def sidebar_controls(profile: dict) -> Dict[str, Any]:
 
 def tab_analysis(weather: dict) -> None:
     st.subheader("분석")
-    st.caption("현재 반영된 날씨와 학습된 취향을 요약해서 보여준다.")
+    st.caption("현재 반영된 날씨와 학습된 취향을 요약해서 보여드릴게요")
 
     st.markdown("#### 현재 반영된 날씨")
     st.json(weather)
@@ -1234,7 +1234,7 @@ def tab_analysis(weather: dict) -> None:
         for k, s in prefs:
             st.write(f"- {k} : {s:.2f}")
     else:
-        st.write("아직 데이터가 없다.")
+        st.write("아직 데이터가 없습니다")
 
 
 
@@ -1256,7 +1256,7 @@ def tab_closet() -> None:
 
         if submitted:
             if not name.strip():
-                st.error("아이템명은 필수다.")
+                st.error("아이템명은 필수입니다")
                 st.stop()
 
             # ✅ id 자동 생성
@@ -1275,12 +1275,12 @@ def tab_closet() -> None:
             }
 
             insert_closet_items([new_item])
-            st.success("추가했다.")
+            st.success("추가 완료")
             st.rerun()
 
     items = list_closet_items()
     if not items:
-        st.info("옷장이 비어 있다.")
+        st.info("옷장이 비어 있어요")
         return
 
     cols = st.columns(3)
@@ -1288,7 +1288,7 @@ def tab_closet() -> None:
 
     items = list_closet_items()
     if not items:
-        st.info("옷장이 비어 있다.")
+        st.info("옷장이 비어 있어요")
         return
 
     cols = st.columns(3)
@@ -1339,18 +1339,18 @@ def tab_closet() -> None:
                             ),
                         }
                         update_item(it["id"], patch)
-                        st.success("저장했다.")
+                        st.success("저장 완료")
                         st.rerun()
                 with c2:
                     if st.button("삭제", key=f"del_{it['id']}"):
                         delete_item(it["id"])
-                        st.warning("삭제했다.")
+                        st.warning("삭제 완료")
                         st.rerun()
 
 
 def tab_recommend(profile: dict, api_key: str, weather: dict) -> None:
     st.subheader("코디 추천")
-    st.caption("기본 메인 화면이다. 상황을 고르면 옷장 기반으로 코디를 뽑는다.")
+    st.caption("기본 메인 화면입니다. 상황을 선택하면 옷장 기반으로 코디를 추천해드립니다!")
 
     if "current_outfit" not in st.session_state:
         st.session_state["current_outfit"] = None
@@ -1382,14 +1382,14 @@ def tab_recommend(profile: dict, api_key: str, weather: dict) -> None:
 
     def refresh_reco():
         if not closet_items:
-            st.error("옷장이 비어 있다. 먼저 옷장을 채워야 한다.")
+            st.error("옷장이 비어 있습니다. 먼저 옷장을 채워야 해요!")
             return
         if not api_key:
             outfit = simple_rule_based_outfit(situation, closet_items, weather)
             st.session_state["current_outfit"] = outfit
             return
         try:
-            with st.spinner("오늘의 코디를 고르는 중이다..."):
+            with st.spinner("오늘의 코디를 고르는 중..."):
                 data = gpt_recommend_outfit(
                     api_key=api_key,
                     profile=profile,
@@ -1482,7 +1482,7 @@ def simple_rule_based_outfit(situation: str, closet_items: List[dict], weather: 
             picks.append({"id": x["id"], "name": x["name"]})
 
     title = f"{situation}용 데일리 코디(임시)"
-    notes = "API 키가 없거나 오류라서 임시 규칙 기반으로 골랐다."
+    notes = "API 키가 없거나 오류라서 임시 규칙 기반으로 골랐어요"
     return {
         "id": f"out_{dt.datetime.now().strftime('%Y%m%d_%H%M%S')}",
         "date": dt.date.today().isoformat(),
@@ -1498,7 +1498,7 @@ def tab_today_collection() -> None:
     st.subheader("오늘의 코디 모음")
     outfits = list_outfits(limit=100)
     if not outfits:
-        st.info("아직 저장된 코디가 없다.")
+        st.info("아직 저장된 코디가 없어요")
         return
 
     cols = st.columns(2)
@@ -1617,6 +1617,7 @@ def main() -> None:
             
 if __name__ == "__main__":
     main()
+
 
 
 
