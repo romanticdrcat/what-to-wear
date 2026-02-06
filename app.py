@@ -9,6 +9,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import streamlit as st
 from streamlit_geolocation import streamlit_geolocation
+import streamlit.components.v1 as components
 
 from urllib.parse import urlencode
 
@@ -556,6 +557,77 @@ def get_preference_summary(top_n: int = 12) -> List[Tuple[str, float]]:
     return [(r["key"], float(r["score"])) for r in rows]
 
 
+LS_KEY = "OPENAI_API_KEY"
+
+def load_api_key_from_localstorage() -> None:
+    """
+    브라우저 localStorage에 저장된 OPENAI_API_KEY를 읽어서
+    st.session_state["openai_api_key"]에 주입한다.
+
+    구현 방식:
+    - JS가 localStorage를 읽어서 URL query param(ls_api_key)에 실어 리로드
+    - 파이썬이 query param을 읽어 세션에 저장
+    """
+
+    # 이미 세션에 키가 있으면 굳이 다시 읽지 않음
+    if st.session_state.get("openai_api_key"):
+        return
+
+    # JS로 localStorage 값을 query param에 실어 리로드
+    components.html(
+        f"""
+        <script>
+        (function() {{
+          const k = localStorage.getItem("{LS_KEY}") || "";
+          if (!k) return;
+
+          const url = new URL(window.location.href);
+          // 이미 붙어있으면 무한루프 방지
+          if (url.searchParams.get("ls_api_key")) return;
+
+          url.searchParams.set("ls_api_key", k);
+          window.location.replace(url.toString());
+        }})();
+        </script>
+        """,
+        height=0,
+    )
+
+    # query param에서 읽어 세션에 저장
+    q = st.query_params
+    if q.get("ls_api_key"):
+        st.session_state["openai_api_key"] = q.get("ls_api_key")
+        # URL에 남아있는 키는 지워주기(노출 최소화)
+        try:
+            del st.query_params["ls_api_key"]
+        except Exception:
+            pass
+
+
+def save_api_key_to_localstorage(api_key: str) -> None:
+    """온보딩에서 입력한 키를 localStorage에 저장한다."""
+    components.html(
+        f"""
+        <script>
+        localStorage.setItem("{LS_KEY}", {json.dumps(api_key)});
+        </script>
+        """,
+        height=0,
+    )
+
+
+def clear_api_key_localstorage() -> None:
+    """(옵션) localStorage 키 삭제용"""
+    components.html(
+        f"""
+        <script>
+        localStorage.removeItem("{LS_KEY}");
+        </script>
+        """,
+        height=0,
+    )
+
+
 # =========================
 # GPT HELPERS
 # =========================
@@ -599,19 +671,34 @@ def gpt_generate_initial_closet(
 - 성별: {gender}
 - 옷장 스타일: {closet_style}
 
-요구사항:
-- 현실적인 데일리 옷장 아이템 {n_items}개를 생성한다.
+최우선 목표: "사계절을 확실히 커버하는 현실적인 데일리 옷장"을 만든다.
+
+[필수 포함 조건 - 반드시 충족]
+- 총 {n_items}개 아이템.
+- 아래 아이템/카테고리를 반드시 포함(이름은 자연스럽게 변형 가능):
+  1) 겨울 아우터: 패딩 1개 이상, 롱패딩 1개 이상
+  2) 여름 상의: 나시(슬리브리스) 1개 이상
+  3) 여름 하의: 5부 반바지 1개 이상, 숏팬츠 1개 이상
+  4) 간절기 아우터: 트렌치/바람막이/가디건 중 1개 이상
+- 신발(shoes)은 최소 2개 이상 (예: 스니커즈, 로퍼/부츠/샌들 중 택)
+- 하의(bottom)는 최소 6개 이상, 상의(top)는 최소 8개 이상, 아우터(outer)는 최소 5개 이상
+
+[형식 규칙]
 - 각 아이템은 반드시 아래 JSON 스키마를 따른다.
-- id는 "itm_001"처럼 3자리 넘버링으로 유일해야 한다.
+- id는 "itm_001"처럼 3자리 넘버링으로 유일해야 한다. (itm_001 ~ itm_{n_items:03d})
 - category는 다음 중 하나: "top","bottom","outer","shoes","bag","accessory"
-- color는 영어 소문자(black, white, navy, beige, gray, brown, blue, green, red 등)로.
+- color는 영어 소문자(black, white, navy, beige, gray, brown, blue, green, red 등)
 - length는 "short","regular","long" 중 하나.
 - fit은 "slim","regular","oversized","wide" 중 하나.
 - flashiness는 0~10 정수.
-- tags는 한국어 키워드 2~4개(계절/무드/스타일 등).
+- tags는 한국어 키워드 2~4개이며, tags에는 계절 태그를 반드시 1개 포함:
+  - "봄" 또는 "여름" 또는 "가을" 또는 "겨울" 중 하나는 꼭 들어가야 한다.
 
-출력은 JSON만. 다른 문장 금지.
+[출력]
+- 출력은 JSON 배열만.
+- 다른 문장 금지.
 """
+
     resp = client.responses.create(
         model=model,
         input=prompt,
@@ -867,9 +954,6 @@ def onboarding_screen() -> None:
     st.title(APP_TITLE)
     st.caption("귀찮은 사람들을 위한 코디 추천 어플이다. 최초 1회만 물어본다.")
 
-    # (중요) 온보딩 화면에서도 위치 컴포넌트를 렌더링해줘야 브라우저 권한 팝업이 뜬다.
-    # 체크박스를 켜면 즉시 geolocation 컴포넌트가 렌더링되면서 허용 요청이 뜬다.
-
     with st.form("onboarding_form", clear_on_submit=False):
         age = st.number_input("나이", min_value=10, max_value=80, value=22, step=1)
         gender = st.selectbox("성별", ["여성", "남성", "논바이너리/기타", "비공개"])
@@ -879,21 +963,20 @@ def onboarding_screen() -> None:
         )
         location_allowed = st.checkbox("위치 정보 허용(허용하면 자동으로 날씨를 불러온다)", value=True)
 
-        # ✅ [추가] 온보딩에서 API 키 필수 입력 (여기 위치가 제일 깔끔함)
+        # ✅ API 키 필수 입력
+        default_key = st.session_state.get("openai_api_key", "")
         onboard_api_key = st.text_input(
             "OpenAI API 키 (필수)",
             type="password",
-            value=st.session_state.get("openai_api_key", ""),
-            help="키는 DB에 저장하지 않고 세션에만 보관한다.",
+            value=default_key,
+            help="온보딩을 넘어가려면 키가 필요하다. 입력한 키는 브라우저에만 저장한다.",
         )
 
-
-        # ✅ 여기: 체크하면 바로 브라우저 권한 요청이 뜨도록 컴포넌트를 렌더링
+        # 위치 렌더(권한 팝업)
         loc = None
         if location_allowed:
             st.markdown("✅ 브라우저에서 위치 권한을 **허용**해라. (버튼 누를 필요 없다)")
             loc = streamlit_geolocation()
-
             if loc and loc.get("latitude") and loc.get("longitude"):
                 st.success(f"위치 확인됨: lat={loc['latitude']}, lon={loc['longitude']}")
             else:
@@ -901,30 +984,30 @@ def onboarding_screen() -> None:
 
         submitted = st.form_submit_button("시작하기")
 
-    if submitted:
-        upsert_profile(int(age), gender, closet_style, bool(location_allowed))
-
-    if submitted:
-    # ✅ [추가] 키 없으면 온보딩 통과 불가
-    if not onboard_api_key.strip():
-        st.error("OpenAI API 키를 입력해야 넘어갈 수 있다.")
+    if not submitted:
         return
 
-    # ✅ [추가] 세션에 저장(사이드바에 자동으로 채워지게)
+    # ✅ 1) 키 검증 먼저 (프로필 저장 전에 막아야 함)
+    if not onboard_api_key.strip():
+        st.error("OpenAI API 키를 입력해야 시작할 수 있다.")
+        st.stop()
+
+    # ✅ 2) 키 저장(세션 + localStorage)
     st.session_state["openai_api_key"] = onboard_api_key.strip()
+    save_api_key_to_localstorage(st.session_state["openai_api_key"])
 
+    # ✅ 3) 그 다음 프로필 저장
     upsert_profile(int(age), gender, closet_style, bool(location_allowed))
-    ...
 
+    # ✅ 4) 위치 저장(가능하면)
+    if location_allowed and loc and loc.get("latitude") and loc.get("longitude"):
+        st.session_state["geo_lat"] = str(loc["latitude"])
+        st.session_state["geo_lon"] = str(loc["longitude"])
 
-        # ✅ 여기: 온보딩 끝날 때 위경도를 세션에 저장해둔다.
-        if location_allowed and loc and loc.get("latitude") and loc.get("longitude"):
-            st.session_state["geo_lat"] = str(loc["latitude"])
-            st.session_state["geo_lon"] = str(loc["longitude"])
+    st.success("온보딩 완료다. 이제 자동으로 날씨를 불러온다.")
+    st.session_state["onboarded"] = True
+    st.rerun()
 
-        st.success("온보딩 완료다. 이제 자동으로 날씨를 불러온다.")
-        st.session_state["onboarded"] = True
-        st.rerun()
 
 
 def ensure_initial_closet(profile: dict, api_key: str) -> None:
@@ -1060,7 +1143,6 @@ def _maybe_autofetch_weather(
 def sidebar_controls(profile: dict) -> Dict[str, Any]:
     st.sidebar.header("설정")
 
-    # ✅ [수정] 세션에 저장된 키를 기본값으로 넣기 + 사이드바에서 바꾸면 세션도 갱신
     api_key = st.sidebar.text_input(
         "OpenAI API 키",
         type="password",
@@ -1068,11 +1150,16 @@ def sidebar_controls(profile: dict) -> Dict[str, Any]:
         help="온보딩에서 입력한 키가 기본으로 들어간다.",
         key="sidebar_openai_api_key",
     )
-    if api_key.strip():
-        st.session_state["openai_api_key"] = api_key.strip()
 
-    st.sidebar.divider()
-    ...
+    # ✅ [핵심] 사이드바에서 바뀐 키를 세션 + localStorage에 반영
+    prev_key = st.session_state.get("openai_api_key", "")
+    if api_key.strip() and api_key.strip() != prev_key:
+        st.session_state["openai_api_key"] = api_key.strip()
+        save_api_key_to_localstorage(st.session_state["openai_api_key"])
+
+        # (선택) 키 바꾸면 추천도 새로 뽑히게 하고 싶으면:
+        st.session_state["current_outfit"] = None
+        st.rerun()
 
     st.sidebar.divider()
 
@@ -1450,6 +1537,7 @@ def tab_today_collection() -> None:
 # =========================
 def main() -> None:
     st.set_page_config(page_title=APP_TITLE, page_icon="👕", layout="wide")
+    load_api_key_from_localstorage()
     init_db()
 
     profile = get_profile()
@@ -1507,6 +1595,7 @@ def main() -> None:
             
 if __name__ == "__main__":
     main()
+
 
 
 
